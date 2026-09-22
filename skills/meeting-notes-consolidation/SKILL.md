@@ -23,7 +23,12 @@ the skill at yours; it should hold:
   schema.
 - The **"Consolidated through <date>"** cursor — where the last run stopped.
 - Any **tool-arg quirks** for your Notion plan (e.g. plans without `ai_search` /
-  `query_meeting_notes` must use `search` + `query-data-sources` in SQL mode).
+  `query_meeting_notes` must use `search` + `query-data-sources` in SQL mode). `query-data-sources`
+  wants the data source as `collection://<id>` — a bare UUID errors with `Invalid data source
+  URL`, and the SQL `FROM` is that same `collection://<id>` string. Dates live in expanded
+  columns `date:Date:start` / `date:Date:is_datetime`. To fix an existing page (e.g. a
+  mis-attributed counterpart) use `notion-update-page` with `command: update_properties` for
+  properties and `command: replace_content` with a `new_str` body for the page text.
 - A **name-normalization map** — how your recorders mishear recurring people, companies, and
   tools. Transcription garbles names consistently, so a small lookup fixes them.
 
@@ -38,18 +43,29 @@ additive — add new recorders here as they appear; the reconciliation in Step 2
 interchangeable.
 
 - **Granola** (MCP): `list_meetings` / `query_granola_meetings` (last_30_days), then
-  `get_meeting_transcript` for the enhanced note. Granola's enhanced note is usually the
-  **most reliable** written record.
+  `get_meetings` (plural, by id) — its `summary` field is the enhanced-note body. Granola's
+  enhanced note is usually the **most reliable** written record. Do **not** use
+  `get_meeting_transcript` unless on a paid Granola tier; on free/basic it returns
+  `Transcripts are only available to paid Granola tiers` and `get_meetings` is the way in.
 - **Gemini notes** (Google Drive MCP): `search_files` with a structured query like
   `title contains 'Notes by Gemini' and modifiedTime > '<RFC3339>'` (no `order_by`, no
   doc-type words), then `read_file_content`. Gemini "not enough conversation in a
   supported language" = empty note, skip it. Gemini 1:1 transcripts are often near-useless
   audio ("Yeah… yeah") — use Gemini mainly for **attendees and titles**, not content.
 - **Fathom** (MCP): `list_meetings` / `search_meetings` for the window, then
-  `get_meeting_summary` + `get_meeting_transcript`. Fathom summaries are structured — good
-  for action items and decisions.
+  `get_meeting_summary` (+ `get_meeting_transcript` if you need detail). Fathom summaries are
+  structured — good for action items and decisions — but carry **no reliable speaker labels**
+  (a bot-less capture renders everyone as "Speaker 1"), so never attribute a quote, role, or
+  decision to a named person from Fathom alone. Take names from Granola or the calendar.
 - **Future recorders**: same pattern — list in window, fetch summary/transcript, feed into
   Step 2.
+
+**Recorders lag.** An ad hoc meeting can take ~30–60 min to surface in Granola/Fathom, and
+Gemini longer. If the user says a meeting happened but it isn't listed, re-poll rather than
+concluding it's missing. If one recorder is still processing, write the page from the
+reliable sources now and note the pending one in the source line — create-only means folding
+a late source in later needs an explicit update, rarely worth it for a 1:1 (Gemini is low
+value there anyway).
 
 ## Step 2 — Reconcile against Google Calendar (source of truth)
 
@@ -65,6 +81,13 @@ counterpart. The calendar event is the truth.
   recorder.
 - **Merge** all sources for the same meeting into one page: prefer Granola/Fathom for
   content, gcal for metadata, Gemini as a fallback for attendees/title.
+- **Ad hoc / off-calendar meetings.** Not every meeting has a gcal event (impromptu calls,
+  ad hoc Google Meets). With no matching event there is nothing to reconcile against: take
+  attendees from the recorders, **treat the counterpart as unverified**, and say so in the
+  source line. Recorder titles guess the counterpart from the audio and are often wrong — a
+  note titled "with X" may name someone who was only *discussed*, not present. If the
+  counterpart matters and no calendar event confirms it, **flag it to the user** instead of
+  trusting the title.
 - Apply the **name-normalization map** from Step 0 to fix misheard names, companies, and
   tools. If you spot a **new** mishearing that the map doesn't cover, note it — you'll add
   it back in Step 5.
@@ -74,8 +97,12 @@ counterpart. The calendar event is the truth.
 Before creating anything, `search` / `query-data-sources` (SQL mode) the AI Meeting Notes
 Hub for a page with the same meeting + date. **If a page already exists, SKIP it** — do not
 recreate and do not overwrite. Only update an existing page if the user explicitly asks you
-to (e.g. "re-do yesterday's standup note"), and even then confirm which page first. The
-cursor from Step 0 should already prevent reprocessing; this dedup is the backstop.
+to (e.g. "re-do yesterday's standup note"), and even then confirm which page first.
+
+This dedup is the **primary** guard, not a backstop: several meetings share a day and ad hoc
+ones surface hours later, so a date-only cursor can't be trusted for same-day re-runs. Always
+run it. Treat the Step 0 cursor as a hint for how far back to look, and store it as a
+timestamp, not just a date.
 
 ## Step 4 — Write consolidated pages to Notion
 
@@ -107,7 +134,9 @@ UTC** — convert from your local timezone; set `date:Date:start` to UTC ISO and
 *Source: Granola [& Fathom] [& Gemini notes: [title](url)]. Attendee and time verified against Google Calendar.*
 ```
 
-- The italic **source line goes at the bottom**, listing which recorders fed the page.
+- The italic **source line goes at the bottom**, listing which recorders fed the page. For an
+  off-calendar meeting, say so and name where attendees came from instead, e.g.
+  `*Source: Granola & Fathom. Ad hoc meeting, not on Google Calendar; attendees per recorders.*`
 - Set a **page emoji icon** that matches the topic.
 - **Write each page in the meeting's own language.** If you hold meetings in more than one
   language, match it — e.g. a Dutch meeting gets a fully Dutch page (`## Samenvatting`,

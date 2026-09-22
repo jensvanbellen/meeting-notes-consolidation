@@ -1,7 +1,7 @@
 # meeting-notes-consolidation
 
-A `/meeting-notes-consolidation` skill for Claude Code. It gathers your recent
-meeting notes from multiple recorders — Granola, Gemini (Google Drive), Fathom, and
+A `/meeting-notes-consolidation` skill for Claude Code, Codex, and omp. It gathers your
+recent meeting notes from multiple recorders — Granola, Gemini (Google Drive), Fathom, and
 any you add later — reconciles each against Google Calendar (the source of truth for
 time, attendees, and the real topic), and writes one clean, detailed page per meeting
 into your Notion meeting-notes hub. Create-only: it never overwrites or deletes
@@ -9,14 +9,23 @@ existing pages.
 
 ## Requirements
 
-Claude Code with MCP servers for the sources you use:
+Any agent that can load a `SKILL.md` (Claude Code, Codex, omp, …) plus MCP servers for the
+sources you use:
 
 - **Granola**, **Fathom** — meeting recorders
 - **Google Drive** — for "Notes by Gemini" docs
 - **Google Calendar** — reconciliation / source of truth
 - **Notion** — the destination hub
 
-Any subset works; the skill treats sources as additive.
+Any subset works; the skill treats sources as additive. The tool names in the skill (e.g.
+`list_events`, `query-data-sources`) are illustrative — the exact names come from whichever
+MCP servers your agent has loaded, so wire the equivalent tools in Codex/omp.
+
+Granola, Fathom, and Notion run as standalone/local MCP servers, so they work anywhere
+(Claude, Codex, omp). Google Calendar and Google Drive are typically Claude account
+connectors — if your agent lacks them (omp does), you can still consolidate the recorders
+you have (e.g. Granola + Fathom → Notion), but you lose calendar reconciliation and Gemini
+(Drive) notes until you add standalone Google MCP servers.
 
 ## Install
 
@@ -27,8 +36,13 @@ git clone https://github.com/jensvanbellen/meeting-notes-consolidation.git && cd
 | Tool | Location | Invoke |
 |------|----------|--------|
 | Claude Code | `~/.claude/skills/meeting-notes-consolidation` | `/meeting-notes-consolidation` |
+| Codex | `~/.codex/skills/meeting-notes-consolidation` + `~/.codex/prompts/meeting-notes-consolidation.md` | `/meeting-notes-consolidation` |
+| omp (Oh My Pi) | reads `~/.claude/skills` (needs `skills.enableClaudeUser: true`) | auto-loaded |
 
-Symlinked, so edits take effect immediately. `./install.sh --uninstall` removes the link.
+`install.sh` symlinks the one `SKILL.md` into Claude Code and Codex — no drift — and adds a
+thin Codex prompt so the slash command works there too. omp needs no separate step: it reads
+`~/.claude/skills` directly. Edits to this repo take effect immediately.
+`./install.sh --uninstall` removes the links.
 
 ## Local state file (set this up once)
 

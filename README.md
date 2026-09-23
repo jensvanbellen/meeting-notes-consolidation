@@ -56,7 +56,7 @@ in it:
 - Any **Notion tool-arg quirks** for your plan (e.g. plans without `ai_search` must use
   `search` + `query-data-sources` in SQL mode).
 - A **name-normalization map** — recorders mishear recurring names the same way every
-  time (`"Jure" → Djurre`); a small lookup fixes them.
+  time (`"Jure" → Djurre`, `"Blanco"/"Branco" → Branko`); a small lookup fixes them.
 
 The skill advances the cursor and appends new normalizations after each run.
 

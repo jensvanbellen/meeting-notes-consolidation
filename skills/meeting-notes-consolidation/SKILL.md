@@ -13,32 +13,40 @@ Fathom, more later), reconcile them against Google Calendar, and write one clean
 detailed Notion page per meeting into the **📝 AI Meeting Notes Hub** — the single
 source of truth. Preserve as much substance as the sources allow.
 
-## Step 0 — Load your local state (do this first)
+## Step 0 — Load state from Notion (do this first)
 
-The volatile, per-user details do not live in this skill — keep them in a **local state
-file** (a notes-hub config, or a Claude Code memory) and read it before anything else. Point
-the skill at yours; it should hold:
+All run state lives in Notion, next to the hub, so every machine and agent sees the same
+state. Nothing is read from or written to the local machine.
 
-- The Notion **database + data-source IDs** for your meeting-notes hub, and the property
-  schema.
-- The **"Consolidated through <date>"** cursor — where the last run stopped.
-- Any **tool-arg quirks** for your Notion plan (e.g. plans without `ai_search` /
-  `query_meeting_notes` must use `search` + `query-data-sources` in SQL mode). `query-data-sources`
-  wants the data source as `collection://<id>` — a bare UUID errors with `Invalid data source
-  URL`, and the SQL `FROM` is that same `collection://<id>` string. Dates live in expanded
-  columns `date:Date:start` / `date:Date:is_datetime`. To fix an existing page (e.g. a
-  mis-attributed counterpart) use `notion-update-page` with `command: update_properties` for
-  properties and `command: replace_content` with a `new_str` body for the page text.
-- A **name-normalization map** — how your recorders mishear recurring people, companies, and
-  tools. Transcription garbles names consistently, so a small lookup fixes them.
+1. **Config page.** Search Notion for the page titled **Meeting Notes Consolidation Config**
+   and fetch it. It holds:
+   - The hub **database URL** and **data source URL** (`collection://<id>`).
+   - The **name-normalization map** — how your recorders mishear recurring people,
+     companies, and tools. Transcription garbles names consistently, so a small lookup
+     fixes them.
+2. **First run (no config page).** Search for the hub by name ("AI Meeting Notes Hub"),
+   fetch it to get the data source URL, then create the config page as a private page with
+   a `## Hub` section (both URLs) and an empty `## Name normalizations` section, in that
+   order. Tell the user you created it.
+3. **Window.** Derive where the last run stopped from the hub itself; there is no stored
+   cursor. Query `SELECT MAX("date:Date:start") FROM "collection://<id>"` and start the
+   window **48 hours before** that timestamp, ending now. The overlap is deliberate:
+   recorders lag, and the Step 3 dedup skips anything already written. If the hub is empty,
+   ask the user for a start date. If the user names a specific date range or meeting, honor
+   that instead.
 
-Start this run from meetings **after** the cursor date. If the user names a specific date
-range or meeting, honor that instead. See the [README](../../README.md) for how to set this
-state file up.
+**Notion tool notes.** Plans without `ai_search` / `query_meeting_notes` must use `search` +
+`query-data-sources` in SQL mode. `query-data-sources` wants the data source as
+`collection://<id>` — a bare UUID errors with `Invalid data source URL` — and the SQL `FROM` is
+that same `collection://<id>` string. Dates live in expanded columns `date:Date:start` /
+`date:Date:is_datetime`. To fix an existing page (e.g. a mis-attributed counterpart) use
+`notion-update-page` with `command: update_properties` for properties and
+`command: replace_content` with a `new_str` body for the page text. To append to the config
+page, use `command: insert_content` (appends at the end).
 
 ## Step 1 — Gather from every source
 
-Pull candidate meetings from each recorder for the window (cursor → now). Sources are
+Pull candidate meetings from each recorder for the Step 0 window. Sources are
 additive — add new recorders here as they appear; the reconciliation in Step 2 makes them
 interchangeable.
 
@@ -99,10 +107,10 @@ Hub for a page with the same meeting + date. **If a page already exists, SKIP it
 recreate and do not overwrite. Only update an existing page if the user explicitly asks you
 to (e.g. "re-do yesterday's standup note"), and even then confirm which page first.
 
-This dedup is the **primary** guard, not a backstop: several meetings share a day and ad hoc
-ones surface hours later, so a date-only cursor can't be trusted for same-day re-runs. Always
-run it. Treat the Step 0 cursor as a hint for how far back to look, and store it as a
-timestamp, not just a date.
+This dedup is the **primary** guard, not a backstop: the Step 0 window overlaps the last run
+on purpose, several meetings share a day, and ad hoc ones surface hours later. Always run it.
+It also keeps runs from different machines safe: whichever runs second skips what the first
+wrote.
 
 ## Step 4 — Write consolidated pages to Notion
 
@@ -110,7 +118,8 @@ Create one page per meeting in the AI Meeting Notes Hub (IDs from Step 0). Match
 existing pages' structure exactly.
 
 **Properties:** `Meeting title` (title), `Subject` (one-line), `Date` (datetime, **store
-UTC** — convert from your local timezone; set `date:Date:start` to UTC ISO and
+UTC** — convert using the calendar event's own offset, not the machine's clock; set
+`date:Date:start` to UTC ISO and
 `date:Date:is_datetime` = 1), `Follow-up status` (one of: "To follow up" / "In progress" /
 "No follow-ups" / "Done"). Adjust these to your own hub's schema.
 
@@ -144,23 +153,23 @@ UTC** — convert from your local timezone; set `date:Date:start` to UTC ISO and
 - Favor detail. This hub is the single source of truth, so capture decisions, rationale,
   numbers, and owners — not just headlines.
 
-## Step 5 — Update your state (close the loop)
+## Step 5 — Update state and report
 
-After a successful run, update your local state file (from Step 0):
-- Move the **"Consolidated through <date>"** cursor forward to the last meeting processed,
-  and keep a short list of the batch you handled.
-- Append any **new name normalizations** you discovered in Step 2.
+There is no cursor to move: the next run derives its window from the hub. Append any **new
+name normalizations** you found in Step 2 to the end of the config page, which is its
+`## Name normalizations` section. Change nothing else on that page.
 
 Then report to the user: which meetings were added/updated/skipped, and anything that
 needed a judgment call (ambiguous title, empty note, unmatched calendar event).
 
 ## Guardrails
 
-- **Create-only. This skill never overwrites or deletes existing Notion content.** It uses
-  `notion-create-pages` to add new pages and nothing else. Two independent guards keep it
-  from touching what's already there: the Step 0 cursor (only processes meetings after the
-  last run) and the Step 3 dedup (skips any meeting already in the hub). Editing an existing
-  page happens only on an explicit, confirmed request.
+- **Create-only for meeting pages. This skill never overwrites or deletes an existing meeting
+  page.** It uses `notion-create-pages` to add new ones. The only page it edits is the config
+  page: created on first run, then appended to with new name normalizations. Two independent
+  guards keep it from re-touching the hub: the Step 0 window starts from the latest meeting
+  already there, and the Step 3 dedup skips any meeting already in the hub. Editing an
+  existing meeting page happens only on an explicit, confirmed request.
 - Never invent meeting content. If a source is empty or unintelligible, say so and rely on
   the others; if none has real content, skip the page rather than fabricate.
 - Calendar wins for who/when. When recorder and calendar disagree, trust the calendar.

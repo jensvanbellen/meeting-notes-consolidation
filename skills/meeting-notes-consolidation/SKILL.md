@@ -2,6 +2,8 @@
 name: meeting-notes-consolidation
 description: Consolidate recent meeting notes from Granola, Gemini (Google Drive), Fathom, and any future recorder into the Notion "AI Meeting Notes Hub" — the single source of truth — verifying every meeting against Google Calendar. Use when the user says "consolidate my meeting notes", "update my Notion meeting notes", "sync meeting notes", or invokes /meeting-notes-consolidation.
 user-invocable: true
+# Claude Code only. Codex ignores this key and runs on its configured model.
+model: sonnet
 metadata:
   author: jens
 ---

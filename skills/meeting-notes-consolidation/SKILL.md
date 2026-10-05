@@ -2,6 +2,8 @@
 name: meeting-notes-consolidation
 description: Consolidate recent meeting notes from Granola, Gemini (Google Drive), Fathom, and any future recorder into the Notion "AI Meeting Notes Hub" — the single source of truth — verifying every meeting against Google Calendar. Use when the user says "consolidate my meeting notes", "update my Notion meeting notes", "sync meeting notes", or invokes /meeting-notes-consolidation.
 user-invocable: true
+# Claude Code only. Codex ignores this key and runs on its configured model.
+model: sonnet
 metadata:
   author: jens
 ---
@@ -96,6 +98,9 @@ counterpart. The calendar event is the truth.
   note titled "with X" may name someone who was only *discussed*, not present. If the
   counterpart matters and no calendar event confirms it, **flag it to the user** instead of
   trusting the title.
+- **Skip company-wide all-hands** such as the weekly WEEKSTART. The company-wide invite
+  delivers their Gemini notes whether or not you attended, and they hold none of your
+  follow-ups. List them as skipped in the report; do not ask whether to add them.
 - Apply the **name-normalization map** from Step 0 to fix misheard names, companies, and
   tools. If you spot a **new** mishearing that the map doesn't cover, note it — you'll add
   it back in Step 5.

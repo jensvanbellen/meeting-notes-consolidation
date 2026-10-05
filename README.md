@@ -91,6 +91,10 @@ reach your Notion. Everything it needs sits next to the hub:
   the calendar reconciliation makes them interchangeable.
 - **Personal state lives outside the skill**, in your own Notion, so the workflow is
   shareable while your hub IDs and colleague-name map stay yours.
+- **Sonnet in Claude Code.** The work is fetch, match, and write, with the judgment calls
+  spelled out in the skill, so `model: sonnet` handles it at lower cost than Opus. Effort
+  is inherited from the session, keeping the cross-referencing thorough. Codex ignores
+  `model:` and runs on its configured model.
 
 ## Repo layout
 
